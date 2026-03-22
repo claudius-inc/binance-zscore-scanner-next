@@ -1,36 +1,105 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Binance Perp Z-Score Scanner (Next.js)
+
+A Next.js 15 dashboard that scans all Binance perpetual futures and visualizes statistical anomalies using z-scores.
+
+![Dashboard Preview](./docs/preview.png)
+
+## Features
+
+- **4 Analysis Views**
+  - 2D vs 5D VWAP: Quick market context
+  - 2D VWAP vs Prior Week: Independent window validation
+  - 2D VWAP vs Current Week: Weekly trend analysis
+  - VWAP vs Funding Rate: Leverage risk detection
+
+- **Interactive Scatter Plot**
+  - Sector-based coloring (L1, DeFi, Meme, AI, etc.)
+  - σ grid lines (±1σ, ±2σ, ±3σ)
+  - Dynamic dot sizing by volume or open interest
+  - Hover tooltips with full details
+
+- **Filtering & Search**
+  - Filter by σ threshold
+  - Filter by sector
+  - Symbol search
+  - Dot size customization
+
+- **Data Table**
+  - Sortable columns
+  - CSV export
+  - Extreme value highlighting
+
+- **Auto-refresh** every 60 seconds
+
+## Tech Stack
+
+- **Framework:** Next.js 15 with App Router
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS
+- **Components:** shadcn/ui
+- **Charts:** Recharts
+- **Data:** Binance Futures Public API (no auth required)
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# Install dependencies
+npm install
+
+# Run development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to view the dashboard.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Z-Score Interpretation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Z-Score | Meaning | Probability |
+|---------|---------|-------------|
+| ±1σ | Normal | 68% |
+| ±2σ | Unusual | 5% |
+| ±3σ | Rare | 0.3% |
 
-## Learn More
+Values beyond ±2σ are highlighted as statistical outliers worth investigating.
 
-To learn more about Next.js, take a look at the following resources:
+## API Routes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `GET /api/data` - Fetches and analyzes all Binance perp symbols
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+```
+src/
+├── app/
+│   ├── page.tsx           # Main dashboard
+│   ├── layout.tsx         # Root layout
+│   └── api/data/route.ts  # Data API endpoint
+├── components/
+│   ├── scatter-plot.tsx   # Z-score scatter plot
+│   ├── filters.tsx        # Sidebar filters
+│   └── data-table.tsx     # Results table
+└── lib/
+    ├── binance.ts         # Binance API client
+    ├── vwap.ts            # VWAP calculation
+    ├── zscore.ts          # Z-score calculation
+    ├── sectors.ts         # Sector mappings
+    └── types.ts           # TypeScript types
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Environment Variables
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+No environment variables required - uses Binance public API.
+
+## License
+
+MIT
+
+## Credits
+
+Converted from Python/Streamlit version to Next.js by Claudius Inc.

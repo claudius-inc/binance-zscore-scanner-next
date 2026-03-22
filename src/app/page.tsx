@@ -1,65 +1,304 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ZScoreScatterPlot } from "@/components/scatter-plot";
+import { Filters } from "@/components/filters";
+import { DataTable } from "@/components/data-table";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+import type { SymbolRow, FilterState } from "@/lib/types";
+import { VIEW_OPTIONS } from "@/lib/types";
+import { getAllSectors } from "@/lib/sectors";
+
+const initialFilters: FilterState = {
+  view: "2D vs 5D VWAP",
+  sigmaThreshold: 0,
+  selectedSectors: getAllSectors(),
+  sizeBy: "24H Volume",
+  searchQuery: "",
+};
 
 export default function Home() {
+  const [data, setData] = useState<SymbolRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FilterState>(initialFilters);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/data");
+      if (!res.ok) throw new Error("Failed to fetch data");
+      const json = await res.json();
+      setData(json.data);
+      setLastUpdate(new Date(json.timestamp).toLocaleTimeString());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+
+    // Auto-refresh every 60 seconds
+    const interval = setInterval(fetchData, 60000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const viewConfig = VIEW_OPTIONS[filters.view];
+
+  // Filter data based on current filters
+  const filteredData = useMemo(() => {
+    return data.filter((row) => {
+      // Sector filter
+      if (!filters.selectedSectors.includes(row.sector)) return false;
+
+      // Search filter
+      if (
+        filters.searchQuery &&
+        !row.symbol.includes(filters.searchQuery.toUpperCase())
+      )
+        return false;
+
+      // Sigma threshold filter
+      const xValue = row[viewConfig.xField] as number | null;
+      const yValue = row[viewConfig.yField] as number | null;
+
+      if (filters.sigmaThreshold > 0) {
+        const xExceeds =
+          xValue !== null && Math.abs(xValue) >= filters.sigmaThreshold;
+        const yExceeds =
+          yValue !== null && Math.abs(yValue) >= filters.sigmaThreshold;
+        if (!xExceeds && !yExceeds) return false;
+      }
+
+      return true;
+    });
+  }, [data, filters, viewConfig]);
+
+  // Stats calculations
+  const extremeCount = useMemo(() => {
+    return filteredData.filter((row) => {
+      const xValue = row[viewConfig.xField] as number | null;
+      const yValue = row[viewConfig.yField] as number | null;
+      return (
+        (xValue !== null && Math.abs(xValue) >= 2) ||
+        (yValue !== null && Math.abs(yValue) >= 2)
+      );
+    }).length;
+  }, [filteredData, viewConfig]);
+
+  const mostExtreme = useMemo(() => {
+    return filteredData.reduce<SymbolRow | null>((max, row) => {
+      const xValue = row[viewConfig.xField] as number | null;
+      const yValue = row[viewConfig.yField] as number | null;
+      const maxZscore = Math.max(Math.abs(xValue ?? 0), Math.abs(yValue ?? 0));
+
+      if (!max) return row;
+
+      const maxXValue = max[viewConfig.xField] as number | null;
+      const maxYValue = max[viewConfig.yField] as number | null;
+      const maxMaxZscore = Math.max(
+        Math.abs(maxXValue ?? 0),
+        Math.abs(maxYValue ?? 0)
+      );
+
+      return maxZscore > maxMaxZscore ? row : max;
+    }, null);
+  }, [filteredData, viewConfig]);
+
+  // Get size field for scatter plot
+  const sizeFieldMap: Record<
+    FilterState["sizeBy"],
+    "volume24h" | "openInterest" | null
+  > = {
+    "24H Volume": "volume24h",
+    "Open Interest": "openInterest",
+    Equal: null,
+  };
+
+  // Export to CSV
+  const handleExport = () => {
+    const headers = [
+      "Symbol",
+      "Sector",
+      "Price",
+      "Z(2D)",
+      "Z(5D)",
+      "Z(FR)",
+      "24H%",
+      "Volume",
+      "OI",
+    ];
+    const rows = filteredData.map((row) => [
+      row.symbol,
+      row.sector,
+      row.currentPrice,
+      row.zscore2d,
+      row.zscore5d,
+      row.zscoreFunding,
+      row.priceChange24h,
+      row.volume24h,
+      row.openInterest,
+    ]);
+
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `zscore_scan_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto py-6 px-4">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            📊 Binance Perp Z-Score Scanner
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-muted-foreground">
+            Scan all Binance perpetual futures for statistical anomalies
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        <div className="flex gap-6">
+          {/* Sidebar */}
+          <aside className="w-80 shrink-0">
+            <Filters
+              filters={filters}
+              onChange={setFilters}
+              onRefresh={fetchData}
+              loading={loading}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            {lastUpdate && (
+              <p className="text-xs text-muted-foreground mt-4 text-center">
+                Last update: {lastUpdate}
+              </p>
+            )}
+          </aside>
+
+          {/* Main Content */}
+          <main className="flex-1 space-y-6">
+            {error && (
+              <Card className="border-red-200 bg-red-50">
+                <CardContent className="py-4">
+                  <p className="text-red-600">Error: {error}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchData}
+                    className="mt-2"
+                  >
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Stats Row */}
+            <div className="grid grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Total Symbols
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{data.length}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Filtered
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{filteredData.length}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Beyond ±2σ
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold text-red-600">
+                    {extremeCount}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Most Extreme
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">
+                    {mostExtreme?.symbol.replace("USDT", "") || "—"}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Scatter Plot */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  📈 {filters.view}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loading && data.length === 0 ? (
+                  <div className="h-[600px] flex items-center justify-center text-muted-foreground">
+                    Loading market data... (this may take a minute on first
+                    load)
+                  </div>
+                ) : (
+                  <ZScoreScatterPlot
+                    data={filteredData}
+                    viewConfig={viewConfig}
+                    sizeField={sizeFieldMap[filters.sizeBy]}
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Data Table */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>📋 Data Table</CardTitle>
+                <Button variant="outline" size="sm" onClick={handleExport}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export CSV
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <DataTable data={filteredData} viewConfig={viewConfig} />
+              </CardContent>
+            </Card>
+
+            {/* Footer */}
+            <div className="text-xs text-muted-foreground text-center pb-4">
+              Z-Score interpretation: ±1σ = normal, ±2σ = unusual (5%
+              probability), ±3σ = rare (0.3% probability). Red grid lines
+              indicate ±2σ boundaries. Data refreshes every 60 seconds.
+            </div>
+          </main>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
