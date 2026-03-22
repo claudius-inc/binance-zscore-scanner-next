@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   Table,
   TableBody,
@@ -40,18 +40,49 @@ const formatVolume = (value: number): string => {
   return `$${value.toFixed(0)}`;
 };
 
+// Moved outside the component to avoid re-creation on render
+interface SortButtonProps {
+  field: SortField;
+  currentField: SortField;
+  direction: SortDirection;
+  onSort: (field: SortField) => void;
+  children: React.ReactNode;
+}
+
+function SortButton({ field, currentField, direction, onSort, children }: SortButtonProps) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-8 px-2 -ml-2"
+      onClick={() => onSort(field)}
+    >
+      {children}
+      {currentField === field ? (
+        direction === "asc" ? (
+          <ArrowUp className="ml-1 h-4 w-4" />
+        ) : (
+          <ArrowDown className="ml-1 h-4 w-4" />
+        )
+      ) : (
+        <ArrowUpDown className="ml-1 h-4 w-4 opacity-50" />
+      )}
+    </Button>
+  );
+}
+
 export function DataTable({ data, viewConfig }: DataTableProps) {
   const [sortField, setSortField] = useState<SortField>("_maxZscore");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  const handleSort = (field: SortField) => {
+  const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
       setSortField(field);
       setSortDirection("desc");
     }
-  };
+  }, [sortField, sortDirection]);
 
   const sortedData = useMemo(() => {
     const sorted = [...data].map((row) => ({
@@ -91,32 +122,6 @@ export function DataTable({ data, viewConfig }: DataTableProps) {
     return sorted;
   }, [data, sortField, sortDirection, viewConfig]);
 
-  const SortButton = ({
-    field,
-    children,
-  }: {
-    field: SortField;
-    children: React.ReactNode;
-  }) => (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-8 px-2 -ml-2"
-      onClick={() => handleSort(field)}
-    >
-      {children}
-      {sortField === field ? (
-        sortDirection === "asc" ? (
-          <ArrowUp className="ml-1 h-4 w-4" />
-        ) : (
-          <ArrowDown className="ml-1 h-4 w-4" />
-        )
-      ) : (
-        <ArrowUpDown className="ml-1 h-4 w-4 opacity-50" />
-      )}
-    </Button>
-  );
-
   return (
     <div className="border rounded-lg overflow-hidden">
       <div className="max-h-[500px] overflow-auto">
@@ -124,32 +129,44 @@ export function DataTable({ data, viewConfig }: DataTableProps) {
           <TableHeader className="sticky top-0 bg-background z-10">
             <TableRow>
               <TableHead className="w-[100px]">
-                <SortButton field="symbol">Symbol</SortButton>
+                <SortButton field="symbol" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+                  Symbol
+                </SortButton>
               </TableHead>
               <TableHead className="w-[100px]">
-                <SortButton field="sector">Sector</SortButton>
+                <SortButton field="sector" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+                  Sector
+                </SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field="currentPrice">Price</SortButton>
+                <SortButton field="currentPrice" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+                  Price
+                </SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field={viewConfig.xField as keyof SymbolRow}>
+                <SortButton field={viewConfig.xField as keyof SymbolRow} currentField={sortField} direction={sortDirection} onSort={handleSort}>
                   {viewConfig.xLabel.replace("Z-Score ", "Z ")}
                 </SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field={viewConfig.yField as keyof SymbolRow}>
+                <SortButton field={viewConfig.yField as keyof SymbolRow} currentField={sortField} direction={sortDirection} onSort={handleSort}>
                   {viewConfig.yLabel.replace("Z-Score ", "Z ")}
                 </SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field="priceChange24h">24H %</SortButton>
+                <SortButton field="priceChange24h" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+                  24H %
+                </SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field="volume24h">Volume 24H</SortButton>
+                <SortButton field="volume24h" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+                  Volume 24H
+                </SortButton>
               </TableHead>
               <TableHead className="text-right">
-                <SortButton field="openInterest">OI</SortButton>
+                <SortButton field="openInterest" currentField={sortField} direction={sortDirection} onSort={handleSort}>
+                  OI
+                </SortButton>
               </TableHead>
             </TableRow>
           </TableHeader>

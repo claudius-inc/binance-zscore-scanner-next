@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export const runtime = 'edge';
 export const preferredRegion = ['sin1', 'hkg1', 'syd1'];
@@ -28,11 +28,6 @@ interface BinanceTicker {
   symbol: string;
   volume: string;
   quoteVolume: string;
-}
-
-interface BinanceOI {
-  symbol: string;
-  openInterest: string;
 }
 
 const SECTORS: Record<string, string[]> = {
@@ -73,7 +68,7 @@ function calculateZScore(value: number, mean: number, std: number): number {
   return (value - mean) / std;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Fetch exchange info
     const exchangeRes = await fetch('https://fapi.binance.com/fapi/v1/exchangeInfo', {
